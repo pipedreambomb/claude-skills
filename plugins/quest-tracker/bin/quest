@@ -1,0 +1,300 @@
+#!/usr/bin/env bash
+# loose-ends: a plain-text ledger of open conversational threads.
+# Format, one record per line, tab separated:
+#   status \t id \t epoch \t text \t kind \t num
+# status is one of: open live done drop quest
+#   (a "quest" line carries the current quest title in the text field)
+# kind is q (quest step, the default), t (tangent) or b (background task)
+# num is an optional outline number for quest steps, e.g. 2 or 2.1
+set -uo pipefail
+
+SELF="${BASH_SOURCE[0]}"
+
+_slug() {
+  local d="${CLAUDE_PROJECT_DIR:-$PWD}"
+  printf '%s' "$d" | tr -c 'A-Za-z0-9' '-' | sed -e 's/--*/-/g' -e 's/^-//' -e 's/-$//' | cut -c1-80
+}
+
+LEDGER_DIR="${LOOSE_ENDS_DIR:-$HOME/.claude/loose-ends}"
+# Resolution order: explicit env, then a pinned default, then the working directory's
+# slug. The pin matters because one body of work is reached from several directories
+# (and from sessions started elsewhere); without it each one silently gets its own
+# empty ledger and the context hook reports nothing parked.
+DEFAULT_FILE=""
+[ -r "$LEDGER_DIR/current" ] && DEFAULT_FILE="$(head -n1 "$LEDGER_DIR/current" 2>/dev/null)"
+case "$DEFAULT_FILE" in
+  "")  ;;
+  /*)  ;;
+  *)   DEFAULT_FILE="$LEDGER_DIR/$DEFAULT_FILE.tsv" ;;
+esac
+LEDGER="${LOOSE_ENDS_FILE:-${DEFAULT_FILE:-$LEDGER_DIR/$(_slug).tsv}}"
+mkdir -p "$(dirname "$LEDGER")"
+[ -f "$LEDGER" ] || : > "$LEDGER"
+
+_next_id() {
+  awk -F'\t' 'BEGIN{m=0} $1!="quest" && $2+0>m{m=$2+0} END{print m+1}' "$LEDGER"
+}
+
+_setstatus() {
+  local id="$1" st="$2" tmp
+  tmp="$(mktemp)"
+  awk -F'\t' -v OFS='\t' -v id="$id" -v st="$st" \
+    '{ if ($1!="quest" && $2+0==id+0) $1=st; print }' "$LEDGER" > "$tmp" && mv "$tmp" "$LEDGER"
+}
+
+# Set one column on one entry, padding the row out if it predates that column.
+_setfield() {
+  local id="$1" col="$2" val="$3" tmp
+  tmp="$(mktemp)"
+  awk -F'\t' -v OFS='\t' -v id="$id" -v c="$col" -v v="$val" \
+    '{ if ($1!="quest" && $2+0==id+0) { if (NF<c) NF=c; $c=v } print }' "$LEDGER" > "$tmp" && mv "$tmp" "$LEDGER"
+}
+
+
+# The pane shows q1, q2.1, t1, b1. Accept those everywhere an id is accepted, and keep
+# raw ids working. Resolution goes through `labels`, which is the renderer itself.
+_resolve() {
+  local a="$1" id
+  case "$a" in
+    [qtbQTB][0-9]*)
+      a="$(printf '%s' "$a" | tr 'QTB' 'qtb')"
+      id="$("$SELF" labels 2>/dev/null | awk -F'\t' -v l="$a" '$1 == l { print $2; exit }')"
+      if [ -z "$id" ]; then echo "no entry labelled $a" >&2; return 1; fi
+      printf '%s' "$id" ;;
+    *) printf '%s' "$a" ;;
+  esac
+}
+
+# What a command just acted on, echoed back so a mistaken id is visible immediately.
+_textof() {
+  awk -F'\t' -v id="$1" '$1 != "quest" && $2 + 0 == id + 0 { print $4; exit }' "$LEDGER"
+}
+
+# Resolve every label BEFORE acting on any. Acting one at a time renumbers the list
+# under the remaining labels, so `done q1 q2` would close q1 and then hit whatever
+# entry had just become q2.
+_resolve_all() {
+  local out="" a i
+  for a in "$@"; do i="$(_resolve "$a")" && out="$out $i"; done
+  printf '%s' "$out"
+}
+
+cmd="${1:-render}"; shift 2>/dev/null || true
+
+# Several sessions share one ledger and every mutation rewrites the whole file, so two
+# writers a second apart would silently drop one another's edits. Serialise them.
+case "$cmd" in
+  add|quest|tang|bg|main|num|done|close|drop|kill|live|pick|open|reopen|edit|archive|clear)
+    exec 9>"$LEDGER.lock" && flock 9 ;;
+esac
+
+case "$cmd" in
+  add)
+    kind="q"
+    case "${1:-}" in -t) kind="t"; shift ;; -b) kind="b"; shift ;; esac
+    text="$*"
+    [ -z "$text" ] && { echo "usage: tangent add [-t|-b] <text>" >&2; exit 1; }
+    text="$(printf '%s' "$text" | tr '\t\n' '  ')"
+    # refuse near-duplicates of anything still open
+    if awk -F'\t' -v t="$(printf '%s' "$text" | tr 'A-Z' 'a-z')" \
+         '($1=="open"||$1=="live"){ l=tolower($4); if (l==t) exit 1 }' "$LEDGER"; then
+      id="$(_next_id)"
+      printf 'open\t%s\t%s\t%s\t%s\t\n' "$id" "$(date +%s)" "$text" "$kind" >> "$LEDGER"
+      echo "parked #$id: $text"
+    else
+      echo "already parked: $text"
+    fi
+    ;;
+  quest)
+    title="$(printf '%s' "$*" | tr '\t\n' '  ')"
+    tmp="$(mktemp)"
+    awk -F'\t' '$1!="quest"' "$LEDGER" > "$tmp"
+    [ -n "$title" ] && printf 'quest\t0\t%s\t%s\t\t\n' "$(date +%s)" "$title" >> "$tmp"
+    mv "$tmp" "$LEDGER"
+    echo "quest: ${title:-(cleared)}"
+    ;;
+  tang)  for i in $(_resolve_all "$@"); do _setfield "$i" 5 t; _setfield "$i" 6 ""; echo "#$i is a tangent"; done ;;
+  bg)    for i in $(_resolve_all "$@"); do _setfield "$i" 5 b; _setfield "$i" 6 ""; echo "#$i is a background task"; done ;;
+  main)  for i in $(_resolve_all "$@"); do _setfield "$i" 5 q; echo "#$i is a quest step"; done ;;
+  num)   i="$(_resolve "$1")" || exit 1; _setfield "$i" 6 "${2:-}"; echo "#$i numbered ${2:-(cleared)}" ;;
+  done|close)  for i in $(_resolve_all "$@"); do _setstatus "$i" done; echo "closed #$i: $(_textof "$i")"; done ;;
+  drop|kill)   for i in $(_resolve_all "$@"); do _setstatus "$i" drop; echo "dropped #$i: $(_textof "$i")"; done ;;
+  live|pick)   for i in $(_resolve_all "$@"); do _setstatus "$i" live; echo "now live #$i: $(_textof "$i")"; done ;;
+  open|reopen) for i in $(_resolve_all "$@"); do _setstatus "$i" open; echo "reopened #$i: $(_textof "$i")"; done ;;
+  edit)
+    id="$(_resolve "$1")" || exit 1; shift
+    _setfield "$id" 4 "$(printf '%s' "$*" | tr '\t\n' '  ')"
+    echo "edited #$id"
+    ;;
+  archive|clear)
+    tmp="$(mktemp)"
+    awk -F'\t' '$1!="done" && $1!="drop"' "$LEDGER" > "$tmp"
+    mv "$tmp" "$LEDGER"; echo "archived closed and dropped threads"
+    ;;
+  path) echo "$LEDGER" ;;
+  use)
+    # Pin the ledger every session should open, regardless of working directory.
+    if [ -z "${1:-}" ]; then rm -f "$LEDGER_DIR/current"; echo "unpinned"; else
+      printf '%s\n' "$1" > "$LEDGER_DIR/current"; echo "pinned: $1"; fi
+    ;;
+  count) awk -F'\t' '($1=="open"||$1=="live")' "$LEDGER" | wc -l | tr -d ' ' ;;
+  list)
+    # Labelled exactly as the pane labels them — a caller must never see a different
+    # numbering from the one on the user's screen.
+    "$SELF" labels | awk -F'\t' -v L="$LEDGER" '
+      { lab[$2] = $1 }
+      END {
+        while ((getline line < L) > 0) {
+          n = split(line, f, "\t")
+          if (f[1] == "quest") { print "QUEST: " f[4]; continue }
+          if (f[1] != "open" && f[1] != "live") continue
+          printf "%s%s %s\n", lab[f[2]], (f[1] == "live" ? " [live]" : ""), f[4]
+        }
+      }'
+    ;;
+  brief)
+    n="$(awk -F'\t' '($1=="open"||$1=="live")' "$LEDGER" | wc -l | tr -d ' ')"
+    [ "$n" = "0" ] && exit 0
+    awk -F'\t' '($1=="open"||$1=="live"){ printf "#%s %s\n", $2, $4 }' "$LEDGER"
+    ;;
+  render|labels)
+    # `labels` is the renderer in map mode: same pass, plain "q2.1<TAB>id" output.
+    MAPMODE=0; [ "$cmd" = "labels" ] && MAPMODE=1
+    width="${1:-${COLUMNS:-37}}"
+    case "$width" in ''|*[!0-9]*) width=34 ;; esac
+    [ "$width" -lt 20 ] && width=20
+    awk -F'\t' -v W="$width" -v MAP="$MAPMODE" '
+      function rule(  i,s){ s=""; for(i=0;i<W-2;i++) s=s "-"; return s }
+      # Subpoints get a wider label field, so their text clears the dotted number.
+      function labw(depth){ return depth > 0 ? 5 : 4 }
+      function spaces(n,  i,s){ s=""; for(i=0;i<n;i++) s=s " "; return s }
+      # A dotted outline number sorts as a single integer; unnumbered steps sink last.
+      function numkey(n,   a, c) {
+        if (n == "") return 999999
+        c = split(n, a, ".")
+        return a[1] * 1000 + (c > 1 ? a[2] : 0)
+      }
+      function wrap(mark, idc, label, text, depth,   inner, line, n, i, words, first) {
+        inner = W - 4 - depth - labw(depth)
+        BSTATE = 0
+        n = split(text, words, " ")
+        line = ""; first = 1
+        for (i = 1; i <= n; i++) {
+          if (line == "") line = words[i]
+          else if (length(line) + 1 + length(words[i]) <= inner) line = line " " words[i]
+          else { out(mark, idc, label, line, first, depth); first = 0; line = words[i] }
+        }
+        if (line != "") out(mark, idc, label, line, first, depth)
+      }
+      # BSTATE is deliberately global: the wrapper can split a *highlighted span* across
+      # two lines, and a per-call flag would restart at "off" on the second line,
+      # inverting every marker after the break. BASE is the colour a close returns to.
+      function bold(s,   r, p) {
+        r = ""
+        while ((p = index(s, "*")) > 0) {
+          r = r substr(s, 1, p - 1) (BSTATE ? "\033[22m" BASE : HI)
+          BSTATE = !BSTATE
+          s = substr(s, p + 1)
+        }
+        return r s
+      }
+      function out(mark, idc, label, line, first, depth,   pre, body) {
+        # Reopen bold if the span carried over the line break; \033[22m closes it again.
+        pre = BSTATE ? HI : ""
+        body = bold(line)
+        # Visible prefix is 1 + depth + mark + label field + 1; continuations match it.
+        while (length(label) < labw(depth)) label = label " "
+        if (first) printf " %s%s\033[1m%s%s\033[0m %s%s%s\033[22m\033[0m\n", spaces(depth), mark, idc, label, BASE, pre, body
+        else       printf "%s%s%s%s\033[22m\033[0m\n", spaces(depth + labw(depth) + 3), BASE, pre, body
+      }
+      function banner(title,   n, w, i, line, tip) {
+        n = split(toupper(title), w, " "); line = ""; tip = "\342\232\224  "
+        for (i = 1; i <= n; i++) {
+          if (line == "") line = w[i]
+          else if (length(line) + 1 + length(w[i]) <= W - 3) line = line " " w[i]
+          else { printf " \033[1;38;5;220m%s%s\033[0m\n", tip, line; tip = "   "; line = w[i] }
+        }
+        if (line != "") printf " \033[1;38;5;220m%s%s\033[0m\n", tip, line
+      }
+      # A section of unnumbered entries (tangents, background) numbered from 1.
+      function section(head, headcol, col, pfx, n, st, tx,   i, prevHI) {
+        if (n + 0 == 0) return
+        printf "\n\033[1m%s %s\033[0m\n\n", headcol, head
+        prevHI = HI; HI = "\033[1m" headcol   # a section highlights in its own colour
+        for (i = 1; i <= n; i++) {
+          if (st[i] == "live") wrap("\033[1;38;5;150m>", "\033[1;38;5;150m", pfx i, tx[i], 0)
+          else                 wrap(" ", col, pfx i, tx[i], 0)
+        }
+        HI = prevHI
+      }
+      {
+        if ($1 == "quest") qtitle = $4
+        else if ($1 == "live" || $1 == "open") {
+          if ($5 == "t")      { nt++; tst[nt] = $1; ttx[nt] = $4; tid[nt] = $2 }
+          else if ($5 == "b") { nb++; bst[nb] = $1; btx[nb] = $4; bid[nb] = $2 }
+          else { nq++; qst[nq] = $1; qid[nq] = $2; qtx[nq] = $4; qnm[nq] = $6 }
+        }
+      }
+      END {
+        DIM = "\033[38;5;141m"
+        BASE = "\033[38;5;114m"
+        HI = "\033[1;38;5;81m"
+        if (!MAP) {
+          printf "\n"
+          if (qtitle != "") { banner(qtitle); printf "\n" }
+          if (nq + nt + nb == 0) printf "%s  (nothing parked)\033[0m\n", DIM
+        }
+        for (i = 1; i <= nq; i++) ord[i] = i
+        for (i = 2; i <= nq; i++) {           # insertion sort by outline number
+          v = ord[i]; j = i - 1
+          while (j >= 1 && numkey(qnm[ord[j]]) > numkey(qnm[v])) { ord[j+1] = ord[j]; j-- }
+          ord[j+1] = v
+        }
+        # Stored numbers only say what groups under what and in what order; the labels
+        # shown are recomputed every render. Closing "2" can then never strand 2.1 and
+        # 2.4, and a latecomer never shows as a raw id.
+        for (i = 1; i <= nq; i++) if (qnm[i] != "" && index(qnm[i], ".") == 0) vis[qnm[i]] = 1
+        T = 0
+        for (i = 1; i <= nq; i++) {
+          x = ord[i]
+          nm = qnm[x]
+          if (nm != "" && index(nm, ".") > 0) {
+            p = substr(nm, 1, index(nm, ".") - 1)
+            if (p in vis) { LAB[x] = newtop[p] "." (++kids[p]); DEP[x] = 2 }
+            else          { T++; LAB[x] = T; DEP[x] = 0 }   # parent closed: child stands alone
+          } else {
+            T++; LAB[x] = T; DEP[x] = 0
+            if (nm != "") newtop[nm] = T
+          }
+        }
+        # `quest labels` runs this same pass, so the names the CLI accepts can never drift
+        # from the ones on screen. Zone prefixes make q1 and t1 different things.
+        if (MAP) {
+          for (i = 1; i <= nq; i++) { x = ord[i]; printf "q%s\t%s\n", LAB[x], qid[x] }
+          for (i = 1; i <= nt; i++) printf "t%d\t%s\n", i, tid[i]
+          for (i = 1; i <= nb; i++) printf "b%d\t%s\n", i, bid[i]
+          exit
+        }
+        for (i = 1; i <= nq; i++) {
+          x = ord[i]
+          if (qst[x] == "live") wrap("\033[1;38;5;150m>", "\033[1;38;5;150m", "q" LAB[x], qtx[x], DEP[x])
+          else                  wrap(" ", "\033[38;5;220m", "q" LAB[x], qtx[x], DEP[x])
+        }
+        section("TANGENTS", "\033[38;5;167m", "\033[38;5;167m", "t", nt, tst, ttx)
+        # BACKGROUND is only for work actually running without the user — subagents and
+        # jobs, kind=b. Closed threads are not background; they recede below a plain
+        # rule, unheaded, the way they always did.
+        if (nb + 0 > 0) {
+          printf "\n\033[1m%s BACKGROUND\033[0m\n\n", DIM
+          BASE = DIM
+          HI = "\033[1m" DIM
+          for (i = 1; i <= nb; i++) {
+            if (bst[i] == "live") wrap("\033[1;38;5;150m>", "\033[1;38;5;150m", "b" i, btx[i], 0)
+            else                  wrap(" ", DIM, "b" i, btx[i], 0)
+          }
+        }
+      }
+    ' "$LEDGER"
+    ;;
+  *) echo "usage: tangent {add [-t|-b]|quest|tang|bg|main|num|list|brief|render|done|drop|live|reopen|edit|archive|count|path}" >&2; exit 1 ;;
+esac

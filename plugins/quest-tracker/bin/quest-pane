@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Live viewer for the loose-ends ledger. Run this in a narrow tmux pane.
+#   tangent-pane            # follow the ledger for the current project
+#   tangent-pane -i 0.5     # poll interval in seconds
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TANGENT="$HERE/quest"
+INTERVAL=0.5
+while getopts "i:" o; do case "$o" in i) INTERVAL="$OPTARG" ;; esac; done
+
+last=""
+printf '\033[?25l'                       # hide cursor
+trap 'printf "\033[?25h\033[0m\n"' EXIT
+
+# Repaint when the *output* changes, not when a file we guessed at does. Timestamp
+# watching missed every edit that altered the rendering without touching the ledger,
+# which looked exactly like the changes never landing.
+while :; do
+  w="$(tput cols 2>/dev/null || echo 37)"
+  out="$("$TANGENT" render "$w" 2>/dev/null)"
+  if [ "$out" != "$last" ]; then
+    printf '\033[H\033[2J%s\n' "$out"
+    last="$out"
+  fi
+  sleep "$INTERVAL"
+done

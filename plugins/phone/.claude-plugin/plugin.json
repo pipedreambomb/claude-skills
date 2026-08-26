@@ -1,0 +1,10 @@
+{
+  "name": "phone",
+  "displayName": "Phone Mode",
+  "version": "1.0.0",
+  "description": "Detects when you are driving a session from your phone over Remote Control and adapts the replies: everything in the reply text, the tracker carried inline, the tmux pane parked. Switches itself on and off, so you never have to remember either.",
+  "author": { "name": "pipedreambomb", "url": "https://github.com/pipedreambomb" },
+  "license": "MIT",
+  "keywords": ["remote-control", "mobile", "tmux", "focus"],
+  "hooks": "./hooks/hooks.json"
+}

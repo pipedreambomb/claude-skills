@@ -1,0 +1,21 @@
+{
+  "name": "quest-tracker",
+  "displayName": "Quest Tracker",
+  "version": "1.0.0",
+  "description": "An always-visible tracker of what you're actually doing. The main quest and its numbered steps, the tangents that don't block it, and the background work running without you \u2014 in a tmux pane, so you never have to reconstruct it from memory.",
+  "author": {
+    "name": "pipedreambomb",
+    "url": "https://github.com/pipedreambomb"
+  },
+  "license": "MIT",
+  "keywords": [
+    "focus",
+    "quests",
+    "tangents",
+    "tmux",
+    "task-tracking",
+    "executive-function",
+    "context-switching"
+  ],
+  "hooks": "./hooks/hooks.json"
+}

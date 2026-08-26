@@ -1,0 +1,19 @@
+{
+  "name": "pipedreambomb-claude-skills",
+  "owner": {
+    "name": "pipedreambomb",
+    "url": "https://github.com/pipedreambomb"
+  },
+  "plugins": [
+    {
+      "name": "quest-tracker",
+      "source": "./plugins/quest-tracker",
+      "description": "An always-visible tracker of what you are actually doing: the main quest and its numbered steps, the tangents that do not block it, and the background work running without you, in a tmux pane."
+    },
+    {
+      "name": "phone",
+      "source": "./plugins/phone",
+      "description": "Detects when you are driving a session from your phone over Remote Control and adapts the replies accordingly. Switches itself on and off."
+    }
+  ]
+}
