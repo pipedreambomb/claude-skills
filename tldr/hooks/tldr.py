@@ -26,6 +26,20 @@ FENCE = re.compile(r"```.*?```", re.S)
 HAS_TLDR = re.compile(r"^[\s>*_#-]*tl\s*;?\s*dr\b", re.I | re.M)
 # Background jobs end on one of these, which already is the bottom-line summary.
 STATUS_LINE = re.compile(r"^\s*(result|failed|needs input)\s*:", re.I | re.M)
+# The quest tracker, when a reply carries one, sits BELOW the TL;DR -- the user
+# asked for that on 2026-08-26, because a tracker wedged between the prose and the
+# summary splits the response in two. It is a fixed block, not prose the reader has
+# to skim, so it counts toward neither the "is this long enough to need a TL;DR"
+# test nor the TL;DR's own word cap. Matched on the markers the compact rendering
+# always opens with.
+TRACKER = re.compile(r"^\s*(?:\*\*⚔|\*tangents\*|\*background\*|---\s*$\n+\s*\*\*⚔)",
+                     re.M)
+
+
+def strip_tracker(text):
+    """Everything from the tracker block onward, removed."""
+    m = TRACKER.search(text)
+    return text[:m.start()] if m else text
 TAIL_BYTES = 2_000_000
 
 
@@ -103,7 +117,7 @@ def main():
     # aside must not swallow the whole message into the word count.
     found = (list(HAS_TLDR.finditer(text)) or [None])[-1]
     if found:
-        tail = text[found.start():]
+        tail = strip_tracker(text[found.start():])
         n = len(tail.split())
         if n <= MAX_WORDS:
             return
@@ -114,7 +128,7 @@ def main():
             "it into an unreadable sentence."
         )
 
-    if len(FENCE.sub(" ", text).split()) < MIN_WORDS:
+    if len(FENCE.sub(" ", strip_tracker(text)).split()) < MIN_WORDS:
         return
     block(
         "That response was long and had no TL;DR. Reply with nothing but a TL;DR "

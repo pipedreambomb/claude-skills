@@ -46,20 +46,20 @@ this turned itself on, and it will turn itself off the moment they type locally.
   tool call after your prose, and never let a tool call carry a point the reply
   does not also make in full.
 - Send no notification. The reply waits for them; that is the point.
-- ORDER, and it is not negotiable: quest tracker FIRST, then the TL;DR as the very
-  last thing in the reply. The tldr Stop hook treats everything after "TL;DR:" as
-  the TL;DR, so a tracker printed below it blows the word cap and the turn gets
-  blocked. Tracker, then TL;DR, then stop.
+- ORDER: prose, then the TL;DR, then the quest tracker as the very last block,
+  under a thin rule. The user asked for this on 2026-08-26: a tracker wedged
+  between the prose and the summary splits the response in two. tldr.py was taught
+  to stop counting at the tracker, so it no longer blows the word cap -- do not
+  "fix" that by moving the tracker back above the TL;DR.
 - Reconcile the tracker BEFORE you start writing, never part-way through. If the
   Stop hook blocks the turn for a missing TL;DR, the continuation must add ONLY the
-  TL;DR -- do not re-run `quest list` and do not print the tracker again. Doing so
-  emits it twice with a stray tool call stranded between the two copies, which is
-  what the user saw on 2026-08-26.
-- End the reply with the quest tracker, as compact markdown -- never a fenced code
-  block, which on a phone is monospace, wraps at about thirty characters and
-  cannot reflow. Every reply, with no throttle: the entries they most need in
-  front of them are the old ones they have stopped thinking about, so showing it
-  only when it changes is exactly backwards.
+  TL;DR and the tracker -- do not re-run `quest list`. Re-running it emits the
+  tracker twice with a stray tool call stranded between the copies.
+- Render the tracker as compact markdown -- never a fenced code block, which on a
+  phone is monospace, wraps at about thirty characters and cannot reflow. Every
+  reply, with no throttle: the entries they most need in front of them are the old
+  ones they have stopped thinking about, so showing it only when it changes is
+  exactly backwards.
 - Keep replies short. Phone screens are narrow.
 </phone-mode>"""
 
