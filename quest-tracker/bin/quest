@@ -79,13 +79,33 @@ _resolve_all() {
   printf '%s' "$out"
 }
 
+# A closed step earns exactly one appearance -- the render that announces it -- and
+# then leaves. The user asked for that on 2026-08-26, with the obvious rider: it must
+# not turn into a file full of invisible ticks. So "seen" is a stamp in column 7, and
+# anything stamped (plus anything dropped, which never shows at all) is moved out to
+# a sibling log on the next command. The ledger keeps only live business; the log is
+# append-only, never read back, and there if a completed step needs recovering.
+_reap() {
+  local tmp cut
+  cut=$(( $(date +%s) - ${QUEST_RECENT_SECS:-5400} ))
+  awk -F'\t' -v CUT="$cut" \
+    '($1=="drop") || ($1=="done" && ($7!="" || $3+0 < CUT))' "$LEDGER" >> "$LEDGER.done.log"
+  tmp="$(mktemp)"
+  awk -F'\t' -v CUT="$cut" \
+    '!(($1=="drop") || ($1=="done" && ($7!="" || $3+0 < CUT)))' "$LEDGER" > "$tmp" \
+    && mv "$tmp" "$LEDGER"
+}
+
 cmd="${1:-render}"; shift 2>/dev/null || true
 
 # Several sessions share one ledger and every mutation rewrites the whole file, so two
 # writers a second apart would silently drop one another's edits. Serialise them.
 case "$cmd" in
-  add|quest|tang|bg|main|num|done|close|drop|kill|live|pick|open|reopen|edit|archive|clear)
-    exec 9>"$LEDGER.lock" && flock 9 ;;
+  add|quest|tang|bg|main|num|done|close|drop|kill|live|pick|open|reopen|edit|archive|clear|list)
+    exec 9>"$LEDGER.lock" && flock 9
+    # Not before `render`: that runs twice a second in the pane and must never write,
+    # or a tick would be reaped in the same breath it was drawn.
+    _reap ;;
 esac
 
 case "$cmd" in
@@ -155,12 +175,18 @@ case "$cmd" in
         while ((getline line < L) > 0) {
           n = split(line, f, "\t")
           if (f[1] == "quest") { print "QUEST: " f[4]; continue }
-          if (f[1] == "done" && f[3] + 0 > NOW - RECENT) { nd++; dtx[nd] = f[4]; continue }
+          if (f[1] == "done" && f[7] == "") { nd++; dtx[nd] = f[4]; continue }
           if (f[1] != "open" && f[1] != "live") continue
           printf "%s%s %s\n", lab[f[2]], (f[1] == "live" ? " [live]" : ""), f[4]
         }
         for (i = (nd > 3 ? nd - 2 : 1); i <= nd; i++) print "done " dtx[i]
       }'
+    # Reading the list IS the seeing. Stamp what was just shown so the next render
+    # drops it and the next command reaps it.
+    tmp="$(mktemp)"
+    awk -F'\t' -v OFS='\t' -v NOW="$(date +%s)" \
+      '{ if ($1=="done" && $7=="") { if (NF<7) NF=7; $7=NOW } print }' "$LEDGER" > "$tmp" \
+      && mv "$tmp" "$LEDGER"
     ;;
   brief)
     n="$(awk -F'\t' '($1=="open"||$1=="live")' "$LEDGER" | wc -l | tr -d ' ')"
@@ -256,7 +282,7 @@ case "$cmd" in
         # broken tracker -- the user said exactly that on 2026-08-26 -- because the
         # only visible difference between "done" and "never happened" was absent.
         # A short dimmed tail fixes it: proof of motion, without becoming a log.
-        else if ($1 == "done" && $3 + 0 > NOW - RECENT) { nd++; dtx[nd] = $4; dts[nd] = $3 + 0 }
+        else if ($1 == "done" && $7 == "" && $3 + 0 > NOW - RECENT) { nd++; dtx[nd] = $4; dts[nd] = $3 + 0 }
       }
       END {
         DIM = "\033[38;5;141m"
