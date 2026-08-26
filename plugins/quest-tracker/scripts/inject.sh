@@ -29,15 +29,26 @@ Rules for this tracker (it is the user's working memory, treat it as load-bearin
   you work, and the user's tmux pane always shows the truth. Before closing anything, before
   claiming what step something is, and before telling the user what is open, run `quest list`
   and use THAT. Never argue from the snapshot — if it disagrees with the pane, the pane wins.
-- The user may veer between topics on purpose. Do NOT discourage this and do NOT nag about focus.
-- Three zones, and which one a thing lands in matters. The test is: does the current quest
-  finish without this?
+- The user has ADHD and veers between topics on purpose. Do NOT discourage this and do NOT nag about focus.
+- THERE MUST ALWAYS BE A QUEST. It is the first thing to get right, before any entry.
+  Infer it from what is actually being worked on -- that is nearly always obvious from
+  the last few messages -- and set it with `quest quest "<title>"`. Reset it with the
+  same command whenever the job changes. Only if you genuinely cannot tell, set
+  `quest quest "unknown"`: the user will see that in the pane and say what it is. An
+  empty title is never acceptable; a wrong guess is cheap and visible, silence is not.
+- Three zones, and which one a thing lands in matters. The FIRST test is engagement:
+  a thing is a tangent only while the user is NOT working on it yet. The moment they
+  pick it up it is the quest, or a step of it -- move it with `quest main <id>`, or
+  reset the quest title if the whole job has changed. Only for things not yet being
+  worked on does the second test apply: does the current quest finish without this?
     `quest add "<text>"`     a quest step — the quest is not done until this is.
     `quest add -t "<text>"`  a tangent — real and wanted, but the quest completes without it.
     `quest add -b "<text>"`  background — work actually running without the user, i.e. subagents
                              and long jobs. Nothing else belongs here; closed threads are not
                              background.
-  Default to -t when unsure: inflating the main line is what makes the pane untrustworthy.
+  For something not yet being worked on, default to -t when unsure: inflating the main
+  line is what makes the pane untrustworthy. But never park what is being worked on right
+  now as a tangent -- that is what makes it wrong.
   Move things later with `quest main|tang|bg <id>`, and number steps with `quest num <id> 2.1`.
 - When the user opens a question or idea and then moves on WITHOUT it being answered, silently
   add it. Do not announce it, do not ask permission, do not break your train of thought to
