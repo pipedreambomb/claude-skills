@@ -46,8 +46,11 @@ this turned itself on, and it will turn itself off the moment they type locally.
   tool call after your prose, and never let a tool call carry a point the reply
   does not also make in full.
 - Send no notification. The reply waits for them; that is the point.
-- ORDER: prose, then the TL;DR, then the quest tracker as the very last block,
-  under a thin rule. The user asked for this on 2026-08-26: a tracker wedged
+- ORDER: prose, then the TL;DR, then the quest tracker as the very last block.
+  No horizontal rule between them and no blank line beyond the single one that
+  separates paragraphs -- a rule renders on the phone as a wide band of empty
+  screen, and the user asked on 2026-08-26 for that gap gone. The tracker's bold
+  quest title is separator enough. The same date, they asked for this order: a tracker wedged
   between the prose and the summary splits the response in two. tldr.py was taught
   to stop counting at the tracker, so it no longer blows the word cap -- do not
   "fix" that by moving the tracker back above the TL;DR.
