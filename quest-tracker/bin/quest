@@ -89,10 +89,10 @@ _reap() {
   local tmp cut
   cut=$(( $(date +%s) - ${QUEST_RECENT_SECS:-5400} ))
   awk -F'\t' -v CUT="$cut" \
-    '($1=="drop") || ($1=="done" && ($7!="" || $3+0 < CUT))' "$LEDGER" >> "$LEDGER.done.log"
+    '($1=="drop") || ($1=="done" && ($7!="" || ($8!="" ? $8 : $3)+0 < CUT))' "$LEDGER" >> "$LEDGER.done.log"
   tmp="$(mktemp)"
   awk -F'\t' -v CUT="$cut" \
-    '!(($1=="drop") || ($1=="done" && ($7!="" || $3+0 < CUT)))' "$LEDGER" > "$tmp" \
+    '!(($1=="drop") || ($1=="done" && ($7!="" || ($8!="" ? $8 : $3)+0 < CUT)))' "$LEDGER" > "$tmp" \
     && mv "$tmp" "$LEDGER"
 }
 
@@ -137,7 +137,15 @@ case "$cmd" in
   bg)    for i in $(_resolve_all "$@"); do _setfield "$i" 5 b; _setfield "$i" 6 ""; echo "#$i is a background task"; done ;;
   main)  for i in $(_resolve_all "$@"); do _setfield "$i" 5 q; echo "#$i is a quest step"; done ;;
   num)   i="$(_resolve "$1")" || exit 1; _setfield "$i" 6 "${2:-}"; echo "#$i numbered ${2:-(cleared)}" ;;
-  done|close)  for i in $(_resolve_all "$@"); do _setstatus "$i" done; echo "closed #$i: $(_textof "$i")"; done ;;
+  # Column 8 is the close time. The age cutoff used to read column 3 -- the time the
+  # step was CREATED -- so anything opened longer ago than the window was reaped the
+  # instant it closed and its tick was never drawn. Steps that sit open for hours are
+  # exactly the ones whose completion is worth seeing, so it failed on the best cases.
+  done|close)
+    for i in $(_resolve_all "$@"); do
+      _setstatus "$i" done; _setfield "$i" 8 "$(date +%s)"
+      echo "closed #$i: $(_textof "$i")"
+    done ;;
   drop|kill)   for i in $(_resolve_all "$@"); do _setstatus "$i" drop; echo "dropped #$i: $(_textof "$i")"; done ;;
   # The pane marks exactly one entry with the "you are here" arrow, and the rules
   # say one live at a time -- but nothing enforced it, so marking a new step live
@@ -282,7 +290,8 @@ case "$cmd" in
         # broken tracker -- the user said exactly that on 2026-08-26 -- because the
         # only visible difference between "done" and "never happened" was absent.
         # A short dimmed tail fixes it: proof of motion, without becoming a log.
-        else if ($1 == "done" && $7 == "" && $3 + 0 > NOW - RECENT) { nd++; dtx[nd] = $4; dts[nd] = $3 + 0 }
+        else if ($1 == "done" && $7 == "" && ($8 != "" ? $8 : $3) + 0 > NOW - RECENT) {
+          nd++; dtx[nd] = $4; dts[nd] = ($8 != "" ? $8 : $3) + 0 }
       }
       END {
         DIM = "\033[38;5;141m"
