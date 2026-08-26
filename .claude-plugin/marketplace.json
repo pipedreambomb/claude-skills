@@ -7,12 +7,12 @@
   "plugins": [
     {
       "name": "quest-tracker",
-      "source": "./plugins/quest-tracker",
+      "source": "./quest-tracker",
       "description": "An always-visible tracker of what you are actually doing: the main quest and its numbered steps, the tangents that do not block it, and the background work running without you, in a tmux pane. Includes phone mode: when you are driving the session remotely and cannot see the pane, the tracker rides in the replies instead."
     },
     {
       "name": "tldr",
-      "source": "./plugins/tldr",
+      "source": "./tldr",
       "description": "Blocks a long reply from ending without a TL;DR at the bottom."
     }
   ]

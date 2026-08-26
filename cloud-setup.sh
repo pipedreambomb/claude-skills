@@ -18,7 +18,7 @@ git clone --depth 1 https://github.com/pipedreambomb/claude-skills \
   /opt/claude-skills 2>&1 || true
 
 if [ -d /opt/claude-skills ]; then
-  cp /opt/claude-skills/plugins/quest-tracker/bin/quest /usr/local/bin/quest 2>/dev/null || true
+  cp /opt/claude-skills/quest-tracker/bin/quest /usr/local/bin/quest 2>/dev/null || true
   chmod +x /usr/local/bin/quest 2>/dev/null || true
 
   python3 - <<'PY' || true
