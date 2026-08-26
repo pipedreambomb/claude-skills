@@ -41,6 +41,16 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/quest-check.py"
+          }
+        ]
+      }
     ]
   }
 }
