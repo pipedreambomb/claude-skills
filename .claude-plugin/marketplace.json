@@ -14,6 +14,11 @@
       "name": "tldr",
       "source": "./tldr",
       "description": "Blocks a long reply from ending without a TL;DR at the bottom."
+    },
+    {
+      "name": "preview-link",
+      "source": "./preview-link",
+      "description": "Ends every reply with the deploy preview for the branch's open PR. On a phone that link is otherwise several taps and a scroll away, buried in a bot comment on the pull request."
     }
   ]
 }

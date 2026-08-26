@@ -1,0 +1,10 @@
+{
+  "name": "preview-link",
+  "displayName": "Preview Link",
+  "version": "1.0.0",
+  "description": "Puts the deploy preview for the branch's open PR at the bottom of every reply. On a phone the link is otherwise several taps and a scroll away, inside a bot comment on the PR.",
+  "author": { "name": "pipedreambomb", "url": "https://github.com/pipedreambomb" },
+  "license": "MIT",
+  "keywords": ["netlify", "deploy-preview", "pull-request", "mobile"],
+  "hooks": "./hooks/hooks.json"
+}
