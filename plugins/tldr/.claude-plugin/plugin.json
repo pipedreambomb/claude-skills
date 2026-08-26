@@ -1,0 +1,10 @@
+{
+  "name": "tldr",
+  "displayName": "TL;DR",
+  "version": "1.0.0",
+  "description": "Blocks a long reply from ending without a TL;DR. A summary at the bottom is already on screen when the reply arrives; one at the top has scrolled away.",
+  "author": { "name": "pipedreambomb", "url": "https://github.com/pipedreambomb" },
+  "license": "MIT",
+  "keywords": ["summary", "readability", "mobile"],
+  "hooks": "./hooks/hooks.json"
+}

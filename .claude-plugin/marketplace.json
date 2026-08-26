@@ -14,6 +14,11 @@
       "name": "phone",
       "source": "./plugins/phone",
       "description": "Detects when you are driving a session from your phone over Remote Control and adapts the replies accordingly. Switches itself on and off."
+    },
+    {
+      "name": "tldr",
+      "source": "./plugins/tldr",
+      "description": "Blocks a long reply from ending without a TL;DR at the bottom."
     }
   ]
 }
