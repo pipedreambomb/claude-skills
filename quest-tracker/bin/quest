@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # loose-ends: a plain-text ledger of open conversational threads.
 # Format, one record per line, tab separated:
-#   status \t id \t epoch \t text \t kind \t num
+#   status \t id \t epoch \t text \t kind \t num \t (unused) \t closed
 # status is one of: open live done drop quest
 #   (a "quest" line carries the current quest title in the text field)
 # kind is q (quest step, the default), t (tangent) or b (background task)
@@ -31,8 +31,11 @@ LEDGER="${LOOSE_ENDS_FILE:-${DEFAULT_FILE:-$LEDGER_DIR/$(_slug).tsv}}"
 mkdir -p "$(dirname "$LEDGER")"
 [ -f "$LEDGER" ] || : > "$LEDGER"
 
+# Reaped rows leave the ledger, so the live file alone is not enough: ids would be
+# handed out a second time and the .done.log would hold two different "#4"s.
 _next_id() {
-  awk -F'\t' 'BEGIN{m=0} $1!="quest" && $2+0>m{m=$2+0} END{print m+1}' "$LEDGER"
+  awk -F'\t' 'BEGIN{m=0} $1!="quest" && $2+0>m{m=$2+0} END{print m+1}' \
+    "$LEDGER" "$LEDGER.done.log" 2>/dev/null
 }
 
 _setstatus() {
@@ -79,20 +82,29 @@ _resolve_all() {
   printf '%s' "$out"
 }
 
-# A closed step earns exactly one appearance -- the render that announces it -- and
-# then leaves. The user asked for that on 2026-08-26, with the obvious rider: it must
-# not turn into a file full of invisible ticks. So "seen" is a stamp in column 7, and
-# anything stamped (plus anything dropped, which never shows at all) is moved out to
-# a sibling log on the next command. The ledger keeps only live business; the log is
-# append-only, never read back, and there if a completed step needs recovering.
+# A closed step is visible for a while and then leaves. The user asked on 2026-08-26
+# to see a tick once and never accumulate them.
+#
+# The first cut of this tracked a "shown" stamp: whoever rendered a tick marked it seen.
+# That was wrong, and wrong in a way that took three rounds to see. There are TWO
+# readers -- the tmux pane, which is what the user actually looks at, and `quest list`,
+# which the model runs every turn -- and the flag could not tell them apart. `quest done`
+# followed a millisecond later by `quest list` consumed the tick before the pane's
+# half-second poll ever came round, so the pane showed nothing. It looked exactly like a
+# dead tracker, which is precisely what the user reported.
+#
+# Time is the honest mechanism. A tick lives for QUEST_RECENT_SECS after its close time
+# (column 8) and is then reaped to the sibling log. No read ever writes, no two readers
+# race, and nothing invisible piles up in the file. Column 7 is now dead weight kept only
+# so old rows still parse.
 _reap() {
   local tmp cut
-  cut=$(( $(date +%s) - ${QUEST_RECENT_SECS:-5400} ))
+  cut=$(( $(date +%s) - ${QUEST_RECENT_SECS:-1800} ))
   awk -F'\t' -v CUT="$cut" \
-    '($1=="drop") || ($1=="done" && ($7!="" || ($8!="" ? $8 : $3)+0 < CUT))' "$LEDGER" >> "$LEDGER.done.log"
+    '($1=="drop") || ($1=="done" && ($8!="" ? $8 : $3)+0 < CUT)' "$LEDGER" >> "$LEDGER.done.log"
   tmp="$(mktemp)"
   awk -F'\t' -v CUT="$cut" \
-    '!(($1=="drop") || ($1=="done" && ($7!="" || ($8!="" ? $8 : $3)+0 < CUT)))' "$LEDGER" > "$tmp" \
+    '!(($1=="drop") || ($1=="done" && ($8!="" ? $8 : $3)+0 < CUT))' "$LEDGER" > "$tmp" \
     && mv "$tmp" "$LEDGER"
 }
 
@@ -103,8 +115,7 @@ cmd="${1:-render}"; shift 2>/dev/null || true
 case "$cmd" in
   add|quest|tang|bg|main|num|done|close|drop|kill|live|pick|open|reopen|edit|archive|clear|list)
     exec 9>"$LEDGER.lock" && flock 9
-    # Not before `render`: that runs twice a second in the pane and must never write,
-    # or a tick would be reaped in the same breath it was drawn.
+    # Not before `render`: it runs twice a second in the pane and must never write.
     _reap ;;
 esac
 
@@ -177,24 +188,22 @@ case "$cmd" in
     # Labelled exactly as the pane labels them — a caller must never see a different
     # numbering from the one on the user's screen.
     "$SELF" labels | awk -F'\t' -v L="$LEDGER" \
-        -v NOW="$(date +%s)" -v RECENT="${QUEST_RECENT_SECS:-5400}" '
+        -v NOW="$(date +%s)" -v RECENT="${QUEST_RECENT_SECS:-1800}" '
       { lab[$2] = $1 }
       END {
         while ((getline line < L) > 0) {
           n = split(line, f, "\t")
           if (f[1] == "quest") { print "QUEST: " f[4]; continue }
-          if (f[1] == "done" && f[7] == "") { nd++; dtx[nd] = f[4]; continue }
+          if (f[1] == "done") {
+            if ((f[8] != "" ? f[8] : f[3]) + 0 > NOW - RECENT) { nd++; dtx[nd] = f[4] }
+            continue
+          }
           if (f[1] != "open" && f[1] != "live") continue
           printf "%s%s %s\n", lab[f[2]], (f[1] == "live" ? " [live]" : ""), f[4]
         }
         for (i = (nd > 3 ? nd - 2 : 1); i <= nd; i++) print "done " dtx[i]
       }'
-    # Reading the list IS the seeing. Stamp what was just shown so the next render
-    # drops it and the next command reaps it.
-    tmp="$(mktemp)"
-    awk -F'\t' -v OFS='\t' -v NOW="$(date +%s)" \
-      '{ if ($1=="done" && $7=="") { if (NF<7) NF=7; $7=NOW } print }' "$LEDGER" > "$tmp" \
-      && mv "$tmp" "$LEDGER"
+    # Deliberately no write here. Reading the list is not the seeing -- the pane is.
     ;;
   brief)
     n="$(awk -F'\t' '($1=="open"||$1=="live")' "$LEDGER" | wc -l | tr -d ' ')"
@@ -208,7 +217,7 @@ case "$cmd" in
     case "$width" in ''|*[!0-9]*) width=34 ;; esac
     [ "$width" -lt 20 ] && width=20
     awk -F'\t' -v W="$width" -v MAP="$MAPMODE" \
-        -v NOW="$(date +%s)" -v RECENT="${QUEST_RECENT_SECS:-5400}" '
+        -v NOW="$(date +%s)" -v RECENT="${QUEST_RECENT_SECS:-1800}" '
       function rule(  i,s){ s=""; for(i=0;i<W-2;i++) s=s "-"; return s }
       # Subpoints get a wider label field, so their text clears the dotted number.
       function labw(depth){ return depth > 0 ? 5 : 4 }
@@ -290,7 +299,7 @@ case "$cmd" in
         # broken tracker -- the user said exactly that on 2026-08-26 -- because the
         # only visible difference between "done" and "never happened" was absent.
         # A short dimmed tail fixes it: proof of motion, without becoming a log.
-        else if ($1 == "done" && $7 == "" && ($8 != "" ? $8 : $3) + 0 > NOW - RECENT) {
+        else if ($1 == "done" && ($8 != "" ? $8 : $3) + 0 > NOW - RECENT) {
           nd++; dtx[nd] = $4; dts[nd] = ($8 != "" ? $8 : $3) + 0 }
       }
       END {
