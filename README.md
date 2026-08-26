@@ -8,7 +8,7 @@ switching contexts on purpose — rather than for pretending you don't.
 ```
 /plugin marketplace add pipedreambomb/claude-skills
 /plugin install quest-tracker
-/plugin install phone
+/plugin install tldr
 ```
 
 ## quest-tracker
@@ -40,20 +40,26 @@ Includes `/quests`, `/recap`, `/tangent` and `/signoff`.
 
 **Requires tmux** for the pane. The context injection works without it.
 
-## phone
+## phone mode (part of quest-tracker)
 
-Detects when you're driving a session from your phone over Remote Control, and changes
-how the assistant replies: everything in the reply text (the phone client shows only
-what follows the last tool call), the tracker carried inline since the panes are
-invisible, replies kept short, and the tmux pane parked so it stops eating the width
-your reply gets.
+Detects when you're driving a session from a phone over Remote Control and changes how
+replies are shaped: the tracker rides inline since the pane is invisible, replies stay
+short, and the tmux pane is parked so it stops eating the width your reply gets.
 
 It switches itself on and off. Detection is local keystroke recency in tmux, sampled the
-moment a prompt lands: typing at the terminal stamps the tmux client, while a prompt
-over Remote Control arrives by the messaging socket and never touches it. A machine with
-no tmux server — a cloud VM — always reads as remote, which is correct.
+moment a prompt lands: typing at the terminal stamps the tmux client, while a prompt over
+Remote Control arrives by the messaging socket and never touches it. A machine with no
+tmux server — a cloud VM — always reads as remote, which is correct.
 
-Pairs with quest-tracker, which supplies the tracker it carries.
+It lives inside quest-tracker rather than beside it. The pane and the in-reply tracker are
+one feature seen from two ends, and exactly one of them exists at a time; as a separate
+plugin, the phone half had to assume the tracker half was installed.
+
+## tldr
+
+A Stop hook that won't let a long reply end without a TL;DR — and insists it goes at the
+bottom. A summary at the bottom is already on screen when the reply arrives; one at the
+top has scrolled away by the time you read it.
 
 ## Design notes
 

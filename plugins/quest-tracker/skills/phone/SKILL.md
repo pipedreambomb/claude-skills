@@ -84,8 +84,13 @@ pane is the costlier error. It rebuilds the pane at its recorded width in its or
 window and refuses to add a second if something already put one back. A session that dies
 hard never fires SessionEnd, which is why the first and third paths exist.
 
-## Requires
+## Part of quest-tracker
 
-The quest-tracker plugin, for the tracker this carries into replies, and tmux for
-presence detection. Without tmux the mode simply never activates on a local machine; in a
-cloud session it activates always, which is correct.
+This ships inside the quest-tracker plugin rather than beside it, because the tmux pane
+and the in-reply tracker are one feature seen from two ends: exactly one of them exists
+at a time, whichever is where the user is. Splitting them left the phone half asserting
+that the tracker half was installed, which nothing guaranteed.
+
+tmux is needed for presence detection. Without it the mode never activates locally; in a
+cloud session, where no tmux server runs, it activates always -- which is correct, since
+such a session is always driven remotely.
