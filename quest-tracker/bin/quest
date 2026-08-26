@@ -119,7 +119,14 @@ case "$cmd" in
   num)   i="$(_resolve "$1")" || exit 1; _setfield "$i" 6 "${2:-}"; echo "#$i numbered ${2:-(cleared)}" ;;
   done|close)  for i in $(_resolve_all "$@"); do _setstatus "$i" done; echo "closed #$i: $(_textof "$i")"; done ;;
   drop|kill)   for i in $(_resolve_all "$@"); do _setstatus "$i" drop; echo "dropped #$i: $(_textof "$i")"; done ;;
-  live|pick)   for i in $(_resolve_all "$@"); do _setstatus "$i" live; echo "now live #$i: $(_textof "$i")"; done ;;
+  # The pane marks exactly one entry with the "you are here" arrow, and the rules
+  # say one live at a time -- but nothing enforced it, so marking a new step live
+  # left the old one live too and the arrow pointed at two places at once. Demote
+  # the incumbents first.
+  live|pick)
+    tmp="$(mktemp)"
+    awk -F'\t' -v OFS='\t' '{ if ($1=="live") $1="open"; print }' "$LEDGER" > "$tmp" && mv "$tmp" "$LEDGER"
+    for i in $(_resolve_all "$@"); do _setstatus "$i" live; echo "now live #$i: $(_textof "$i")"; done ;;
   open|reopen) for i in $(_resolve_all "$@"); do _setstatus "$i" open; echo "reopened #$i: $(_textof "$i")"; done ;;
   edit)
     id="$(_resolve "$1")" || exit 1; shift
