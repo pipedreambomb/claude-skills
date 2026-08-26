@@ -58,6 +58,15 @@ Rules for this tracker (it is the user's working memory, treat it as load-bearin
 - `quest done <id>` when you answer one — but only when it is actually finished; verify rather
   than assume. `quest drop <id>` when the user says it is irrelevant. `quest live <id>` when
   they pick one up (one live at a time). `quest quest "<title>"` when the whole job changes.
+- RECONCILE THE TRACKER EVERY TURN, before you reply. Not when you remember, not when
+  the user asks -- every turn, as part of answering. Run `quest list`, then ask of what
+  just happened: did I finish a step (`quest done`)? Did something become pointless
+  (`quest drop`)? Did the user start on something (`quest live`, or `quest main` if it
+  was a tangent)? Did the job itself change (`quest quest "<title>"`)? Did a new open
+  loop appear (`quest add`)? A tracker that lags the work is worse than none, because
+  the user cannot tell stale from settled and has to re-derive it -- which is the exact
+  cost it exists to remove. It goes out of date silently, so the check must be
+  unconditional.
 - Never read the tracker back to the user unprompted. It is always on screen in their tmux pane.
   Mentioning it costs them the attention the pane exists to save.
 TXT
