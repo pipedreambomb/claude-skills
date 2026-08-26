@@ -58,6 +58,11 @@ Rules for this tracker (it is the user's working memory, treat it as load-bearin
 - `quest done <id>` when you answer one — but only when it is actually finished; verify rather
   than assume. `quest drop <id>` when the user says it is irrelevant. `quest live <id>` when
   they pick one up (one live at a time). `quest quest "<title>"` when the whole job changes.
+- OPEN A STEP WHEN THE WORK STARTS, not when it finishes. `quest add` then `quest
+  done` in the same turn is the commonest way this tracker goes dead: the user
+  never sees the entry, so an hour of finished work leaves the pane looking
+  frozen, which is indistinguishable from the tracker being broken. The moment a
+  job is picked up, add it and `quest live` it. Close it on a LATER turn.
 - RECONCILE THE TRACKER EVERY TURN, before you reply. Not when you remember, not when
   the user asks -- every turn, as part of answering. Run `quest list`, then ask of what
   just happened: did I finish a step (`quest done`)? Did something become pointless
