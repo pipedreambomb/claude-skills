@@ -19,6 +19,11 @@
       "name": "preview-link",
       "source": "./preview-link",
       "description": "Ends every reply with the deploy preview for the branch's open PR. On a phone that link is otherwise several taps and a scroll away, buried in a bot comment on the pull request."
+    },
+    {
+      "name": "merge",
+      "source": "./merge",
+      "description": "A /merge command that lands the pull request the session is watching once CI is green \u2014 for repositories where GitHub's auto-merge is never offered because nothing blocks a merge. Reads the pull request's comments first, which auto-merge cannot."
     }
   ]
 }

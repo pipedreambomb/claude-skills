@@ -1,6 +1,6 @@
 # Claude Code skills
 
-A small marketplace of two Claude Code plugins, built for working in bursts and
+A small marketplace of Claude Code plugins, built for working in bursts and
 switching contexts on purpose — rather than for pretending you don't.
 
 ## Install
@@ -60,6 +60,30 @@ plugin, the phone half had to assume the tracker half was installed.
 A Stop hook that won't let a long reply end without a TL;DR — and insists it goes at the
 bottom. A summary at the bottom is already on screen when the reply arrives; one at the
 top has scrolled away by the time you read it.
+
+## merge
+
+A `/merge` command for repositories where GitHub's **Auto-merge when ready** is
+never offered. Auto-merge only appears on a pull request something is actually
+blocking — a required check, a required review — so a repository with no branch
+protection has nothing to block anything, and the checkbox in Claude Code's CI
+status bar, which wraps it, stays greyed out forever.
+
+It is not just a substitute, because it can do the one thing auto-merge cannot:
+**read the pull request's comments before merging.**
+
+A pull request can be green, unblocked, carrying a clean review, and still be one
+you have already said no to. Your objection lives in an ordinary comment, and
+nothing in the merge path reads comments. Worse, you often cannot escalate it into
+something that does — GitHub won't let you request changes on your own pull
+request, so in a solo repository where the automation opens everything under your
+account, a comment is the only place your objection can live. The assistant is the
+only thing in the chain that can find it. This skill makes it look.
+
+The other half is that **you** invoke it. A skill description normally invites the
+assistant to reach for it when the work matches; this one says the opposite, in as
+many words, because a session that invokes it unasked has manufactured its own
+consent — and a merge is not reversible by the person who finds out afterwards.
 
 ## Design notes
 
