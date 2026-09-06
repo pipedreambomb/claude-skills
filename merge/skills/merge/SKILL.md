@@ -52,14 +52,21 @@ merge check reads comments — not GitHub's auto-merge, not a required-review
 rule, not a status check. Every machine-readable signal says go.
 
 They often cannot escalate it into a signal that counts, either: GitHub does not
-let anyone request changes on their own pull request, so in a solo repository —
-where the automation opens everything under their account — a comment is the
-*only* place their objection can live. **You are the only thing in the chain that
-can find it.**
+let anyone *approve* or *request changes* on their own pull request, so in a solo
+repository — where the automation opens everything under their account — a
+comment is the only place their objection can live. **You are the only thing in
+the chain that can find it.**
 
-So before merging, read the comments and look for anything from them that reads
-as doubt, a question you have not answered, or a change they asked for. If you
-find one, stop and ask, even though they said "merge it when it passes" earlier —
+**Comments live in two places, and you must read both.** The conversation
+thread, and inline comments on the diff. They are separate API calls, and the
+inline ones are easy to forget precisely because a *review* cannot be a
+rejection here — but commenting on your own diff is allowed, so an objection may
+sit on the exact lines the merge is about. Reading only the conversation thread
+would miss it, which is the failure this whole section exists to prevent.
+
+So before merging, read both and look for anything from them that reads as
+doubt, a question you have not answered, or a change they asked for. If you find
+one, stop and ask, even though they said "merge it when it passes" earlier —
 they said that before they had seen it.
 
 ## Doing it
@@ -68,7 +75,9 @@ they said that before they had seen it.
    `completed` and none failed.
 2. `method: get` — confirm `mergeable_state` is not `dirty` or `blocked`, and
    `draft` is false.
-3. `method: get_comments` — read them, per above.
+3. `method: get_comments` **and** `method: get_review_comments` — the first is
+   the conversation thread, the second is inline comments on the diff. Both, per
+   above. One without the other is the gap.
 4. `merge_pull_request`. Prefer `merge_method: "merge"` unless the project
    squashes: a squash rewrites the branch's history, so any local clone of it
    needs a force push afterwards.
