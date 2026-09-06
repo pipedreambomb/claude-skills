@@ -26,14 +26,38 @@ home is not /home/violentfemme.
 import json, os, re, subprocess, sys, time
 
 CACHE = os.path.expanduser("~/.claude/cache/preview-url")
-# The Netlify site name, which is not derivable from the repo: the site for
-# `plop` is `plop-game`. One line, committed, per project.
+# Where a project's preview lives, which is never derivable from the repo.
+#
+# TEMPLATE_FILE is the general form and the one to reach for: one line holding
+# the preview URL with `{pr}` where the number goes. It exists because the
+# Netlify assumption below was wrong twice over — a project may not be on
+# Netlify at all, and its preview link may never appear in a commit status.
+# Valet deploys each PR as its own Cloud Run service and announces it in a bot
+# comment, so there is no status to read and the URL has a shape Netlify's
+# regex could never match:
+#
+#   .claude/preview-url   ->  https://valet-pr-{pr}-q2ozd4iokq-uc.a.run.app
+#   .claude/preview-url   ->  https://deploy-preview-{pr}--plop-game.netlify.app
+#
+# The Cloud Run hash is per-project and stable across services, so the whole
+# address is derivable from the number — which matters because this hook has
+# to work in a cloud session with no gh and no token.
+#
+# SITE_FILE is the older Netlify-only form, still read so projects carrying it
+# keep working without being edited.
+TEMPLATE_FILE = ".claude/preview-url"
 SITE_FILE = ".claude/netlify-site"
 # A found link is good for the life of the PR, so it is cached hard. A miss is
 # cached briefly, so opening a PR starts working without waiting the long TTL.
 TTL_HIT = 30 * 60
 TTL_MISS = 90
-PREVIEW = re.compile(r"https://deploy-preview-\d+--[a-z0-9][a-z0-9-]*\.netlify\.app")
+# Used only against a commit status's target URL. Netlify's shape, plus Cloud
+# Run's, so a project that does publish a status is matched either way.
+PREVIEW = re.compile(
+    r"https://deploy-preview-\d+--[a-z0-9][a-z0-9-]*\.netlify\.app"
+    r"|https://[a-z0-9][a-z0-9-]*\.[a-z0-9-]+\.run\.app"
+    r"|https://[a-z0-9][a-z0-9-]*-[a-z0-9]+-[a-z0-9]+\.a\.run\.app"
+)
 
 
 def run(args, cwd, timeout=8):
@@ -91,23 +115,52 @@ def pr_number_from_git(cwd, sha):
     return None
 
 
-def site_name(cwd):
-    for path in (os.path.join(cwd, SITE_FILE),):
-        try:
-            with open(path) as f:
-                name = f.read().strip()
-            if name:
-                return name
-        except Exception:
-            pass
-    return os.environ.get("NETLIFY_SITE") or None
+def first_line(path):
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                # Allow a comment line, so the file can say what it is.
+                if line and not line.startswith("#"):
+                    return line
+    except Exception:
+        pass
+    return None
+
+
+def template(cwd, root):
+    """The preview URL with `{pr}` still in it, or None.
+
+    Looked for beside the checkout and at the repo root, because a hook's cwd
+    is wherever the session happens to be and the file belongs with the repo.
+    """
+    for base in (cwd, root):
+        if not base:
+            continue
+        found = first_line(os.path.join(base, TEMPLATE_FILE))
+        if found and "{pr}" in found:
+            return found
+    env = os.environ.get("PREVIEW_URL_TEMPLATE")
+    if env and "{pr}" in env:
+        return env
+    # The old Netlify-only file, read into the same shape.
+    for base in (cwd, root):
+        if not base:
+            continue
+        name = first_line(os.path.join(base, SITE_FILE))
+        if name:
+            return "https://deploy-preview-{pr}--" + name + ".netlify.app"
+    name = os.environ.get("NETLIFY_SITE")
+    if name:
+        return "https://deploy-preview-{pr}--" + name + ".netlify.app"
+    return None
 
 
 def repo_root(cwd):
     return run(["git", "rev-parse", "--show-toplevel"], cwd)
 
 
-def lookup(cwd):
+def lookup(cwd, root):
     branch, sha = head_and_branch(cwd)
     if not branch:
         return None
@@ -119,15 +172,15 @@ def lookup(cwd):
     number = got.get("pr") if got else pr_number_from_git(cwd, sha)
     if not number:
         return None
-    site = site_name(cwd)
-    if not site:
-        # A PR with no way to name its site is not worth reporting: the PR
+    form = template(cwd, root)
+    if not form:
+        # A PR with no way to name its preview is not worth reporting: the PR
         # link alone is the thing the user already said they don't want.
         return None
     return {
         "pr": number,
         "prUrl": (got or {}).get("prUrl"),
-        "preview": f"https://deploy-preview-{number}--{site}.netlify.app",
+        "preview": form.replace("{pr}", str(number)),
     }
 
 
@@ -159,7 +212,7 @@ def main():
 
     hit, key = cached(root, branch, sha)
     if hit is False:
-        hit = lookup(cwd)
+        hit = lookup(cwd, root)
         os.makedirs(CACHE, exist_ok=True)
         try:
             with open(key, "w") as f:
@@ -173,7 +226,7 @@ def main():
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
             "additionalContext": (
-                f"Open PR #{hit['pr']} for this branch has a Netlify deploy "
+                f"Open PR #{hit['pr']} for this branch has a deploy "
                 f"preview. End every reply with this line, verbatim, on its "
                 f"own line at the very bottom:\n\n"
                 f"**Preview changes:** {hit['preview']}\n\n"

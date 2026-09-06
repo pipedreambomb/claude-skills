@@ -55,6 +55,29 @@ It lives inside quest-tracker rather than beside it. The pane and the in-reply t
 one feature seen from two ends, and exactly one of them exists at a time; as a separate
 plugin, the phone half had to assume the tracker half was installed.
 
+## preview-link
+
+Ends every reply with the open PR's deploy preview, so the link is in the
+conversation rather than several taps away inside a bot comment on GitHub.
+
+The URL comes from **`.claude/preview-url`** — one line, committed per project,
+with `{pr}` where the number goes:
+
+```
+https://deploy-preview-{pr}--plop-game.netlify.app
+https://valet-pr-{pr}-q2ozd4iokq-uc.a.run.app
+```
+
+It was Netlify-only, and that was wrong twice over: a project may not be on
+Netlify, and its preview may never appear in a commit status at all. Valet
+deploys each PR as its own Cloud Run service and announces it in a bot comment,
+so there was no status to read and an address the old regex could never match.
+A template covers both without an API call, which matters because this has to
+work in a cloud session with no `gh` and no token.
+
+The older `.claude/netlify-site` is still read, so a project carrying one keeps
+working untouched.
+
 ## tldr
 
 A Stop hook that won't let a long reply end without a TL;DR — and insists it goes at the
